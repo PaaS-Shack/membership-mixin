@@ -1,0 +1,19 @@
+{
+  "name": "membership-mixin",
+  "version": "1.0.0",
+  "description": "MolecularJS membership-mixin",
+  "main": "membership.mixin.js",
+  "scripts": {},
+  "keywords": [
+    "microservices",
+    "moleculer"
+  ],
+  "author": "FLYBYME",
+  "dependencies": {
+   
+  },
+  "engines": {
+    "node": ">= 12.x.x"
+  },
+  "jest": {}
+}
