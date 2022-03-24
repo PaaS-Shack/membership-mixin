@@ -46,12 +46,12 @@ const SCOPE = {
         } else {
             query.public = true;
         }
-        
+
         return query;
     },
 }
 
-module.exports = function (opts) {
+module.exports = function (opts = { permissions: 'default' }) {
 
     return {
 
@@ -71,7 +71,7 @@ module.exports = function (opts) {
                     members: "string[]"
                 },
                 needEntity: true,
-                permissions: [C.ROLE_OWNER],
+                permissions: [`${opts.permissions}.addMember`],
                 async handler(ctx) {
                     const newMembers = _.uniq(
                         [].concat(ctx.locals.entity.members || [], ctx.params.members)
@@ -97,7 +97,7 @@ module.exports = function (opts) {
                     members: "string[]"
                 },
                 needEntity: true,
-                permissions: [C.ROLE_OWNER],
+                permissions: [`${opts.permissions}.removeMembers`],
                 async handler(ctx) {
                     const newMembers = ctx.locals.entity.members.filter(
                         m => !ctx.params.members.includes(m)
@@ -123,7 +123,7 @@ module.exports = function (opts) {
                     owner: "string"
                 },
                 needEntity: true,
-                permissions: [C.ROLE_OWNER],
+                permissions: [`${opts.permissions}.transferOwnership`],
                 async handler(ctx) {
                     return this.updateEntity(
                         ctx,
