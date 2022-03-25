@@ -68,23 +68,30 @@ module.exports = function (opts = { permissions: 'default' }) {
                 rest: "POST /:id/members",
                 params: {
                     id: "string",
-                    members: "string[]"
+                    member: "string"
                 },
                 needEntity: true,
                 permissions: [`${opts.permissions}.addMember`],
                 async handler(ctx) {
-                    const newMembers = _.uniq(
-                        [].concat(ctx.locals.entity.members || [], ctx.params.members)
-                    );
+
+                    if (ctx.locals.entity.owner !== ctx.meta.userID) {
+                        throw new MoleculerClientError(
+                            `Owner can remove or add members`,
+                            403,
+                            "ERR_NO_PERMISSION",
+                            { owner: ctx.locals.entity.owner }
+                        );
+                    }
 
                     return this.updateEntity(
                         ctx,
                         {
-                            ...ctx.params,
-                            members: newMembers,
-                            scope: false
+                            id: ctx.params.id,
+                            $addToSet: {
+                                members: ctx.params.member
+                            }
                         },
-                        { permissive: true }
+                        { permissive: true, raw: true }
                     );
                 }
             },
@@ -94,23 +101,40 @@ module.exports = function (opts = { permissions: 'default' }) {
                 rest: "DELETE /:id/members",
                 params: {
                     id: "string",
-                    members: "string[]"
+                    member: "string"
                 },
                 needEntity: true,
                 permissions: [`${opts.permissions}.removeMembers`],
                 async handler(ctx) {
-                    const newMembers = ctx.locals.entity.members.filter(
-                        m => !ctx.params.members.includes(m)
-                    );
+
+                    if (ctx.locals.entity.owner == ctx.params.member) {
+                        throw new MoleculerClientError(
+                            `Owner can not be remove as member`,
+                            403,
+                            "ERR_NO_PERMISSION",
+                            { owner: ctx.locals.entity.owner }
+                        );
+                    }
+
+                    if (ctx.locals.entity.owner !== ctx.meta.userID) {
+                        throw new MoleculerClientError(
+                            `Owner can remove or add members`,
+                            403,
+                            "ERR_NO_PERMISSION",
+                            { owner: ctx.locals.entity.owner }
+                        );
+                    }
+
 
                     return this.updateEntity(
                         ctx,
                         {
                             id: ctx.params.id,
-                            members: newMembers,
-                            scope: false
+                            $pull: {
+                                members: ctx.params.member
+                            }
                         },
-                        { permissive: true }
+                        { permissive: true, raw: true }
                     );
                 }
             },
@@ -125,15 +149,30 @@ module.exports = function (opts = { permissions: 'default' }) {
                 needEntity: true,
                 permissions: [`${opts.permissions}.transferOwnership`],
                 async handler(ctx) {
+
+
+
+                    if (ctx.locals.entity.owner !== ctx.meta.userID) {
+                        throw new MoleculerClientError(
+                            `Owner can only transfer ownership`,
+                            403,
+                            "ERR_NO_PERMISSION",
+                            { owner: ctx.locals.entity.owner }
+                        );
+                    }
+
                     return this.updateEntity(
                         ctx,
                         {
                             id: ctx.params.id,
-                            owner: ctx.params.owner,
-                            members: _.uniq([ctx.params.owner, ...ctx.locals.entity.members]),
-                            scope: false
+                            $addToSet: {
+                                members: ctx.params.owner
+                            },
+                            $set: {
+                                owner: ctx.params.owner
+                            }
                         },
-                        { permissive: true }
+                        { permissive: true, raw: true }
                     );
                 }
             },
