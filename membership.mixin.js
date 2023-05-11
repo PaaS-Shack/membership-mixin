@@ -38,9 +38,9 @@ const FIELDS = {
 const SCOPE = {
     // List only boards where the logged in user is a member.
     // If no logged in user, list only public boards.
-    membership(query={}, ctx) {
+    membership(query, ctx) {
         if (!ctx) return;
-
+        if(!query) return query;
         if (ctx && ctx.meta.userID) {
             query.members = ctx.meta.userID;
         } else {
