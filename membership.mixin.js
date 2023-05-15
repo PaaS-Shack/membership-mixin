@@ -40,11 +40,11 @@ const SCOPE = {
     // If no logged in user, list only public boards.
     membership(query, ctx) {
         if (!ctx) return;
-        if(!query) return query;
-        if (ctx && ctx.meta.userID) {
+        
+        if(!query) return;
+        
+        if (ctx.meta.userID) {
             query.members = ctx.meta.userID;
-        } else {
-            query.public = true;
         }
 
         return query;
