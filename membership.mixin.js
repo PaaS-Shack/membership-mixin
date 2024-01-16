@@ -1,5 +1,6 @@
 "use strict";
 
+const Errors = require("moleculer").Errors;
 
 const FIELDS = {
     owner: {
@@ -36,13 +37,12 @@ const FIELDS = {
 }
 
 const SCOPE = {
-    // List only boards where the logged in user is a member.
-    // If no logged in user, list only public boards.
+
     membership(query, ctx) {
         if (!ctx) return;
-        
-        if(!query) return;
-        
+
+        if (!query) return;
+
         if (ctx.meta.userID) {
             query.members = ctx.meta.userID;
         }
@@ -62,118 +62,191 @@ module.exports = function (opts = { permissions: 'default' }) {
             defaultScopes: ["membership"]
         },
         actions: {
-            // call v1.boards.addMembers --#userID xar8OJo4PMS753GeyN62 --id ZjQ1GMmYretJmgKpqZ14 --members[] xar8OJo4PMS753GeyN62
             addMembers: {
-                description: "Add members to the board",
-                rest: "POST /:id/members",
-                params: {
-                    id: "string",
-                    member: "string"
+                description: "Add members to the entity",
+                rest: {
+                    method: "POST",
+                    path: "/:id/members"
                 },
-                needEntity: true,
-                permissions: [`${opts.permissions}.addMember`],
+                params: {
+                    id: {
+                        type: "string",
+                        empty: false,
+                        optional: false
+                    },
+                    member: {
+                        type: "string",
+                        empty: false,
+                        optional: false
+                    }
+                },
                 async handler(ctx) {
 
-                    if (ctx.locals.entity.owner !== ctx.meta.userID) {
-                        throw new MoleculerClientError(
-                            `Owner can remove or add members`,
-                            403,
-                            "ERR_NO_PERMISSION",
-                            { owner: ctx.locals.entity.owner }
-                        );
+                    const { id, member } = ctx.params;
+
+                    // get the entity
+                    const entity = await this.resolveEntities(ctx, {
+                        id,
+                        fields: ["id", "owner", "members"]
+                    });
+
+                    // check entity
+                    if (!entity) {
+                        throw new Errors.MoleculerClientError("The entity does not exist", 403, "ERR_ENTITY_NOT_FOUND");
                     }
 
-                    return this.updateEntity(
-                        ctx,
-                        {
-                            id: ctx.params.id,
-                            $addToSet: {
-                                members: ctx.params.member
-                            }
-                        },
-                        { permissive: true, raw: true }
-                    );
+                    // check if the user is the owner
+                    if (entity.owner !== ctx.meta.userID) {
+                        throw new Errors.MoleculerClientError("Only the owner can add members", 403, "ERR_ONLY_OWNER");
+                    }
+
+                    // check if the user is already a member
+                    if (entity.members.includes(member)) {
+                        throw new Errors.MoleculerClientError("The user is already a member", 403, "ERR_ALREADY_MEMBER");
+                    }
+
+                    // resolve the member
+                    const memberEntity = await ctx.call("v1.accounts.resolve", {
+                        id: member,
+                        fields: ["id", "username", "fullName", "avatar"]
+                    });
+
+                    // check if the member exists
+                    if (!memberEntity) {
+                        throw new Errors.MoleculerClientError("The user does not exist", 403, "ERR_MEMBER_NOT_FOUND");
+                    }
+
+                    // add the member
+                    const update = {
+                        id: entity.id,
+                        $addToSet: {
+                            members: member
+                        }
+                    };
+
+                    // update the entity
+                    return this.updateEntity(ctx, update, { raw: true });
                 }
             },
 
             removeMembers: {
-                description: "Remove members from the board",
-                rest: "DELETE /:id/members",
-                params: {
-                    id: "string",
-                    member: "string"
+                description: "Remove members from the entity",
+                rest: {
+                    method: "DELETE",
+                    path: "/:id/members"
                 },
-                needEntity: true,
-                permissions: [`${opts.permissions}.removeMembers`],
+                params: {
+                    id: {
+                        type: "string",
+                        empty: false,
+                        optional: false
+                    },
+                    member: {
+                        type: "string",
+                        empty: false,
+                        optional: false
+                    }
+                },
                 async handler(ctx) {
 
-                    if (ctx.locals.entity.owner == ctx.params.member) {
-                        throw new MoleculerClientError(
-                            `Owner can not be remove as member`,
-                            403,
-                            "ERR_NO_PERMISSION",
-                            { owner: ctx.locals.entity.owner }
-                        );
+                    const { id, member } = ctx.params;
+
+                    // get the entity
+                    const entity = await this.resolveEntities(ctx, {
+                        id,
+                        fields: ["id", "owner", "members"]
+                    });
+
+                    // check entity
+                    if (!entity) {
+                        throw new Errors.MoleculerClientError("The entity does not exist", 403, "ERR_ENTITY_NOT_FOUND");
                     }
 
-                    if (ctx.locals.entity.owner !== ctx.meta.userID) {
-                        throw new MoleculerClientError(
-                            `Owner can remove or add members`,
-                            403,
-                            "ERR_NO_PERMISSION",
-                            { owner: ctx.locals.entity.owner }
-                        );
+                    // check if the user is the owner
+                    if (entity.owner !== ctx.meta.userID) {
+                        throw new Errors.MoleculerClientError("Only the owner can remove members", 403, "ERR_ONLY_OWNER");
                     }
 
+                    // check if the user is already a member
+                    if (!entity.members.includes(member)) {
+                        throw new Errors.MoleculerClientError("The user is not a member", 403, "ERR_NOT_MEMBER");
+                    }
 
-                    return this.updateEntity(
-                        ctx,
-                        {
-                            id: ctx.params.id,
-                            $pull: {
-                                members: ctx.params.member
-                            }
-                        },
-                        { permissive: true, raw: true }
-                    );
+                    // remove the member
+                    const update = {
+                        id: entity.id,
+                        $pull: {
+                            members: member
+                        }
+                    };
+
+                    // update the entity
+                    return this.updateEntity(ctx, update, { raw: true });
                 }
             },
 
             transferOwnership: {
-                description: "Transfer the ownership of the board",
-                rest: "POST /:id/transfer-ownership",
-                params: {
-                    id: "string",
-                    owner: "string"
+                description: "Transfer the ownership of the entity",
+                rest: {
+                    method: "POST",
+                    path: "/:id/owner"
                 },
-                needEntity: true,
-                permissions: [`${opts.permissions}.transferOwnership`],
+                params: {
+                    id: {
+                        type: "string",
+                        empty: false,
+                        optional: false
+                    },
+                    owner: {
+                        type: "string",
+                        empty: false,
+                        optional: false
+                    }
+                },
                 async handler(ctx) {
 
+                    const { id, owner } = ctx.params;
 
+                    // get the entity
+                    const entity = await this.resolveEntities(ctx, {
+                        id,
+                        fields: ["id", "owner", "members"]
+                    });
 
-                    if (ctx.locals.entity.owner !== ctx.meta.userID) {
-                        throw new MoleculerClientError(
-                            `Owner can only transfer ownership`,
-                            403,
-                            "ERR_NO_PERMISSION",
-                            { owner: ctx.locals.entity.owner }
-                        );
+                    // check entity
+                    if (!entity) {
+                        throw new Errors.MoleculerClientError("The entity does not exist", 403, "ERR_ENTITY_NOT_FOUND");
                     }
 
-                    return this.updateEntity(
-                        ctx,
-                        {
-                            id: ctx.params.id,
-                            $addToSet: {
-                                members: ctx.params.owner
-                            },
-                            $set: {
-                                owner: ctx.params.owner
-                            }
-                        },
-                        { permissive: true, raw: true }
-                    );
+                    // check if the user is the owner
+                    if (entity.owner !== ctx.meta.userID) {
+                        throw new Errors.MoleculerClientError("Only the owner can transfer the ownership", 403, "ERR_ONLY_OWNER");
+                    }
+
+                    // check if the user is already a member
+                    if (!entity.members.includes(owner)) {
+                        throw new Errors.MoleculerClientError("The user is not a member", 403, "ERR_NOT_MEMBER");
+                    }
+
+                    // resolve the new owner
+                    const ownerEntity = await ctx.call("v1.accounts.resolve", {
+                        id: owner,
+                        fields: ["id", "username", "fullName", "avatar"]
+                    });
+
+                    // check if the member exists
+                    if (!ownerEntity) {
+                        throw new Errors.MoleculerClientError("The user does not exist", 403, "ERR_MEMBER_NOT_FOUND");
+                    }                    
+
+                    // transfer the ownership
+                    const update = {
+                        id: entity.id,
+                        owner
+                    };
+
+                    // update the entity
+                    return this.updateEntity(ctx, update, { raw: true });
                 }
             },
         }
